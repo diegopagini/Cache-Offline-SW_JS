@@ -4,6 +4,7 @@
 const CACHE_STATIC_NAME = 'static-v2';
 const CACHE_DYNAMIC_NAME = 'dynamic-v1';
 const CACHE_INMUTABLE_NAME = 'inmutable-v1';
+const CACHE_DYNAMIC_LIMIT = 50;
 
 function limpiarCache(cacheName, numeroItems) {
 	caches.open(cacheName).then((cache) => {
@@ -41,19 +42,48 @@ self.addEventListener('fetch', (event) => {
 	// event.respondWith(caches.match(event.request));
 
 	//2- CACHE WITH NETWORK FALLBACK
-	const respuesta = caches.match(event.request).then((resp) => {
-		if (resp) return resp;
+	// const respuesta = caches.match(event.request).then((resp) => {
+	// 	if (resp) return resp;
 
-		//Si no existe el archivo lo busco en la web.
-		console.log('No existe', event.request.url);
+	// 	//Si no existe el archivo lo busco en la web.
+	// 	console.log('No existe', event.request.url);
 
-		return fetch(event.request).then((newResp) => {
-			caches.open(CACHE_DYNAMIC_NAME).then((cache) => {
-				cache.put(event.request, newResp);
-				limpiarCache(CACHE_DYNAMIC_NAME, 50);
-			});
-			return newResp.clone();
+	// 	return fetch(event.request).then((newResp) => {
+	// 		caches.open(CACHE_DYNAMIC_NAME).then((cache) => {
+	// 			cache.put(event.request, newResp);
+	// 			limpiarCache(CACHE_DYNAMIC_NAME, CACHE_DYNAMIC_LIMIT);
+	// 		});
+	// 		return newResp.clone();
+	// 	});
+	// });
+
+	//3- CACHE WITH NETWORK WITH CACHE FALLBACK
+	// const respuesta = fetch(event.request)
+	// 	.then((resp) => {
+	// 		if (!resp) return caches.match(event.request);
+
+	// 		caches.open(CACHE_DYNAMIC_NAME).then((cache) => {
+	// 			cache.put(event.request, resp);
+	// 			limpiarCache(CACHE_DYNAMIC_NAME, CACHE_DYNAMIC_LIMIT);
+	// 		});
+	// 		return resp.clone();
+	// 	})
+	// 	.catch((err) => {
+	// 		return caches.match(event.request);
+	// 	});
+
+	//4- CACHE WITH NETWORK UPDATE
+	// Cuando el rendimiento es critico.
+	// Las actualizaciones siempre estaran un paso atras.
+	if (event.request.url.includes('bootstrap')) {
+		return event.respondWith(caches.match(event.request));
+	}
+	const respuesta = caches.open(CACHE_STATIC_NAME).then((cache) => {
+		fetch(event.request).then((newResp) => {
+			cache.put(event.request, newResp);
 		});
+
+		return cache.match(event.request);
 	});
 
 	event.respondWith(respuesta);
