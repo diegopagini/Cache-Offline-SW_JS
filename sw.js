@@ -26,6 +26,7 @@ self.addEventListener('install', (event) => {
 			'/css/style.css',
 			'/img/main.jpg',
 			'/js/app.js',
+			'/img/no-img.jpg',
 		]);
 	});
 	const cacheInmutable = caches.open(CACHE_INMUTABLE_NAME).then((cache) => {
@@ -39,38 +40,38 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('fetch', (event) => {
 	//1- CACHE ONLY: toda la app desde el cache.
-	// event.respondWith(caches.match(event.request));
+	event.respondWith(caches.match(event.request));
 
 	//2- CACHE WITH NETWORK FALLBACK
-	// const respuesta = caches.match(event.request).then((resp) => {
-	// 	if (resp) return resp;
+	const respuesta = caches.match(event.request).then((resp) => {
+		if (resp) return resp;
 
-	// 	//Si no existe el archivo lo busco en la web.
-	// 	console.log('No existe', event.request.url);
+		//Si no existe el archivo lo busco en la web.
+		console.log('No existe', event.request.url);
 
-	// 	return fetch(event.request).then((newResp) => {
-	// 		caches.open(CACHE_DYNAMIC_NAME).then((cache) => {
-	// 			cache.put(event.request, newResp);
-	// 			limpiarCache(CACHE_DYNAMIC_NAME, CACHE_DYNAMIC_LIMIT);
-	// 		});
-	// 		return newResp.clone();
-	// 	});
-	// });
+		return fetch(event.request).then((newResp) => {
+			caches.open(CACHE_DYNAMIC_NAME).then((cache) => {
+				cache.put(event.request, newResp);
+				limpiarCache(CACHE_DYNAMIC_NAME, CACHE_DYNAMIC_LIMIT);
+			});
+			return newResp.clone();
+		});
+	});
 
 	//3- CACHE WITH NETWORK WITH CACHE FALLBACK
-	// const respuesta = fetch(event.request)
-	// 	.then((resp) => {
-	// 		if (!resp) return caches.match(event.request);
+	const respuesta = fetch(event.request)
+		.then((resp) => {
+			if (!resp) return caches.match(event.request);
 
-	// 		caches.open(CACHE_DYNAMIC_NAME).then((cache) => {
-	// 			cache.put(event.request, resp);
-	// 			limpiarCache(CACHE_DYNAMIC_NAME, CACHE_DYNAMIC_LIMIT);
-	// 		});
-	// 		return resp.clone();
-	// 	})
-	// 	.catch((err) => {
-	// 		return caches.match(event.request);
-	// 	});
+			caches.open(CACHE_DYNAMIC_NAME).then((cache) => {
+				cache.put(event.request, resp);
+				limpiarCache(CACHE_DYNAMIC_NAME, CACHE_DYNAMIC_LIMIT);
+			});
+			return resp.clone();
+		})
+		.catch((err) => {
+			return caches.match(event.request);
+		});
 
 	//4- CACHE WITH NETWORK UPDATE
 	// Cuando el rendimiento es critico.
@@ -86,5 +87,36 @@ self.addEventListener('fetch', (event) => {
 		return cache.match(event.request);
 	});
 
+	//5- CACHE Y NETWORK RACE
+	const respuesta = new Promise((resolve, reject) => {
+		let rechazada = false;
+
+		const falloUnaVez = () => {
+			if (rechazada) {
+				if (/\.(png|jpg)$/i.test(event.request.url)) {
+					resolve(caches.match('/img/no-image.jpg'));
+				} else {
+					reject('No se encontro respuesta');
+				}
+			} else {
+				rechazada = true;
+			}
+		};
+
+		fetch(event.request)
+			.then((resp) => {
+				resp.ok ? resolve(resp) : falloUnaVez();
+			})
+			.catch((error) => falloUnaVez());
+
+		caches
+			.match(event.request)
+			.then((resp) => {
+				resp ? resolve(resp) : falloUnaVez();
+			})
+			.catch(falloUnaVez);
+	});
+
+	//Siempre hay que devolver una respuesta.
 	event.respondWith(respuesta);
 });
